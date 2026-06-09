@@ -4,7 +4,43 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FilevineClient = void 0;
+exports.formatApiError = formatApiError;
 const axios_1 = __importDefault(require("axios"));
+const DEBUG = process.env.FILEVINE_DEBUG === "1" || process.env.FILEVINE_DEBUG === "true";
+function redactHeaders(headers) {
+    const safe = { ...headers };
+    if (safe.Authorization)
+        safe.Authorization = "[REDACTED]";
+    return safe;
+}
+function formatApiError(error) {
+    if (!axios_1.default.isAxiosError(error)) {
+        return error instanceof Error ? error.message : String(error);
+    }
+    const status = error.response?.status;
+    const body = error.response?.data;
+    const method = error.config?.method?.toUpperCase() ?? "?";
+    const url = [error.config?.baseURL, error.config?.url].filter(Boolean).join("");
+    const detail = body === undefined || body === null || body === ""
+        ? error.message
+        : typeof body === "string"
+            ? body
+            : JSON.stringify(body);
+    return status ? `HTTP ${status} ${method} ${url}: ${detail}` : `${method} ${url}: ${detail}`;
+}
+function logApiError(error) {
+    const method = error.config?.method?.toUpperCase();
+    const url = [error.config?.baseURL, error.config?.url].filter(Boolean).join("");
+    console.error("[filevine-mcp] API error:", {
+        method,
+        url,
+        params: error.config?.params,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseHeaders: error.response?.headers,
+        body: error.response?.data,
+    });
+}
 const REGION_CONFIG = {
     us: {
         api: "https://api.filevineapp.com",
@@ -34,14 +70,36 @@ class FilevineClient {
             throw new Error("Missing required env vars: FILEVINE_CLIENT_ID, FILEVINE_CLIENT_SECRET, FILEVINE_PAT, FILEVINE_ORG_ID");
         }
         this.client = axios_1.default.create({ baseURL: `${this.apiBase}/fv-app/v2` });
-        // Inject auth header on every request
         this.client.interceptors.request.use(async (config) => {
             const token = await this.getAccessToken();
             config.headers["Authorization"] = `Bearer ${token}`;
             config.headers["x-fv-orgid"] = this.orgId;
             if (this.userId)
                 config.headers["x-fv-userid"] = this.userId;
+            config.headers["Accept"] = "application/json";
+            if (DEBUG) {
+                const url = [config.baseURL, config.url].filter(Boolean).join("");
+                console.error("[filevine-mcp] Request:", {
+                    method: config.method?.toUpperCase(),
+                    url,
+                    params: config.params,
+                    headers: redactHeaders(config.headers),
+                });
+            }
             return config;
+        });
+        this.client.interceptors.response.use((response) => {
+            if (DEBUG) {
+                console.error("[filevine-mcp] Response:", {
+                    status: response.status,
+                    url: [response.config.baseURL, response.config.url].filter(Boolean).join(""),
+                });
+            }
+            return response;
+        }, (error) => {
+            logApiError(error);
+            error.message = formatApiError(error);
+            return Promise.reject(error);
         });
     }
     async getAccessToken() {
@@ -49,14 +107,29 @@ class FilevineClient {
         if (this.tokenCache && this.tokenCache.expiresAt > now + 30000) {
             return this.tokenCache.accessToken;
         }
-        // Exchange PAT for access token using client credentials
-        const resp = await axios_1.default.post(`${this.identityBase}/connect/token`, new URLSearchParams({
-            grant_type: "personal_access_token",
-            client_id: this.clientId,
-            client_secret: this.clientSecret,
-            token: this.pat,
-            scope: "fv.api.gateway.access tenant filevine.v2.api.* email openid fv.auth.tenant.read fv.vitals.api.* fv.payments.api.all filevine.v2.webhooks",
-        }), { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        let resp;
+        try {
+            resp = await axios_1.default.post(`${this.identityBase}/connect/token`, new URLSearchParams({
+                grant_type: "personal_access_token",
+                client_id: this.clientId,
+                client_secret: this.clientSecret,
+                token: this.pat,
+                scope: "fv.api.gateway.access tenant filevine.v2.api.* email openid fv.auth.tenant.read fv.vitals.api.* fv.payments.api.all filevine.v2.webhooks",
+            }), { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        }
+        catch (error) {
+            if (axios_1.default.isAxiosError(error)) {
+                console.error("[filevine-mcp] Token exchange failed:", {
+                    status: error.response?.status,
+                    body: error.response?.data,
+                });
+                throw new Error(formatApiError(error));
+            }
+            throw error;
+        }
+        if (DEBUG) {
+            console.error("[filevine-mcp] Token exchange OK, expires_in:", resp.data.expires_in);
+        }
         const { access_token, expires_in } = resp.data;
         this.tokenCache = {
             accessToken: access_token,
