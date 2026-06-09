@@ -192,23 +192,4 @@ export function registerNotesAndTasksTools(server: any, fv: FilevineClient) {
       }
     }
   );
-
-  server.tool(
-    "filevine_complete_task",
-    "Mark a task as complete in Filevine",
-    {
-      projectId: z.number().describe("The Filevine project ID"),
-      taskId: z.number().describe("The task ID to complete"),
-    },
-    async (args: any) => {
-      try {
-        const data = await fv.patch<any>(`projects/${args.projectId}/tasks/${args.taskId}`, {
-          isComplete: true,
-        });
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
-  );
 }

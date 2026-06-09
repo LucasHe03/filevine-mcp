@@ -4,9 +4,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { FilevineClient } from "./client";
 import { registerProjectTools } from "./tools/projects";
 import { registerNotesAndTasksTools } from "./tools/notes-tasks";
-import { registerContactTools } from "./tools/contacts";
-import { registerDocumentTools } from "./tools/documents";
-import { registerLeadDocketTools } from "./tools/lead-docket";
 import { registerUserTools } from "./tools/users";
 
 async function main() {
@@ -24,15 +21,10 @@ async function main() {
     version: "1.0.0",
   });
 
-  // Register all tool groups
   registerProjectTools(server, fv);
   registerNotesAndTasksTools(server, fv);
-  registerContactTools(server, fv);
-  registerDocumentTools(server, fv);
   registerUserTools(server, fv);
-  registerLeadDocketTools(server);
 
-  // Start server over stdio (required for Claude Desktop MCP)
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
