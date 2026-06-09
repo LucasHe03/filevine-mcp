@@ -1,14 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 
-const DEBUG = process.env.FILEVINE_DEBUG === "1" || process.env.FILEVINE_DEBUG === "true";
-
-function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
-  const safe = { ...headers };
-  if (safe.Authorization) safe.Authorization = "[REDACTED]";
-  return safe;
-}
-
-export function formatApiError(error: unknown): string {
+function formatApiError(error: unknown): string {
   if (!axios.isAxiosError(error)) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -23,20 +15,6 @@ export function formatApiError(error: unknown): string {
         ? body
         : JSON.stringify(body);
   return status ? `HTTP ${status} ${method} ${url}: ${detail}` : `${method} ${url}: ${detail}`;
-}
-
-function logApiError(error: AxiosError): void {
-  const method = error.config?.method?.toUpperCase();
-  const url = [error.config?.baseURL, error.config?.url].filter(Boolean).join("");
-  console.error("[filevine-mcp] API error:", {
-    method,
-    url,
-    params: error.config?.params,
-    status: error.response?.status,
-    statusText: error.response?.statusText,
-    responseHeaders: error.response?.headers,
-    body: error.response?.data,
-  });
 }
 
 const REGION_CONFIG: Record<string, { api: string }> = {
@@ -93,32 +71,12 @@ export class FilevineClient {
       config.headers["x-fv-orgid"] = this.orgId;
       if (this.userId) config.headers["x-fv-userid"] = this.userId;
       config.headers["Accept"] = "application/json";
-
-      if (DEBUG) {
-        const url = [config.baseURL, config.url].filter(Boolean).join("");
-        console.error("[filevine-mcp] Request:", {
-          method: config.method?.toUpperCase(),
-          url,
-          params: config.params,
-          headers: redactHeaders(config.headers as Record<string, unknown>),
-        });
-      }
-
       return config;
     });
 
     this.client.interceptors.response.use(
-      (response) => {
-        if (DEBUG) {
-          console.error("[filevine-mcp] Response:", {
-            status: response.status,
-            url: [response.config.baseURL, response.config.url].filter(Boolean).join(""),
-          });
-        }
-        return response;
-      },
+      (response) => response,
       (error: AxiosError) => {
-        logApiError(error);
         error.message = formatApiError(error);
         return Promise.reject(error);
       }
@@ -131,9 +89,8 @@ export class FilevineClient {
       return this.tokenCache.accessToken;
     }
 
-    let resp;
     try {
-      resp = await axios.post(
+      const resp = await axios.post(
         `${this.identityBase}/connect/token`,
         new URLSearchParams({
           grant_type: "personal_access_token",
@@ -144,27 +101,16 @@ export class FilevineClient {
         }),
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
       );
+
+      const { access_token, expires_in } = resp.data;
+      this.tokenCache = {
+        accessToken: access_token,
+        expiresAt: now + expires_in * 1000,
+      };
+      return access_token;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error("[filevine-mcp] Token exchange failed:", {
-          status: error.response?.status,
-          body: error.response?.data,
-        });
-        throw new Error(formatApiError(error));
-      }
-      throw error;
+      throw new Error(formatApiError(error));
     }
-
-    if (DEBUG) {
-      console.error("[filevine-mcp] Token exchange OK, expires_in:", resp.data.expires_in);
-    }
-
-    const { access_token, expires_in } = resp.data;
-    this.tokenCache = {
-      accessToken: access_token,
-      expiresAt: now + expires_in * 1000,
-    };
-    return access_token;
   }
 
   async get<T>(path: string, params?: Record<string, unknown>): Promise<T> {
