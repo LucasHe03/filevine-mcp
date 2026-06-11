@@ -7,6 +7,7 @@ const client_1 = require("./client");
 const projects_1 = require("./tools/projects");
 const notes_tasks_1 = require("./tools/notes-tasks");
 const users_1 = require("./tools/users");
+const reports_1 = require("./tools/reports");
 async function main() {
     let fv;
     try {
@@ -23,6 +24,7 @@ async function main() {
     (0, projects_1.registerProjectTools)(server, fv);
     (0, notes_tasks_1.registerNotesAndTasksTools)(server, fv);
     (0, users_1.registerUserTools)(server, fv);
+    (0, reports_1.registerReportTools)(server, fv);
     const transport = new stdio_js_1.StdioServerTransport();
     await server.connect(transport);
     console.error("[filevine-mcp] Server running. Tools ready.");

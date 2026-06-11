@@ -5,6 +5,7 @@ import { FilevineClient } from "./client";
 import { registerProjectTools } from "./tools/projects";
 import { registerNotesAndTasksTools } from "./tools/notes-tasks";
 import { registerUserTools } from "./tools/users";
+import { registerReportTools } from "./tools/reports";
 
 async function main() {
   let fv: FilevineClient;
@@ -24,6 +25,7 @@ async function main() {
   registerProjectTools(server, fv);
   registerNotesAndTasksTools(server, fv);
   registerUserTools(server, fv);
+  registerReportTools(server, fv);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

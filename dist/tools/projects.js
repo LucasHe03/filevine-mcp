@@ -80,4 +80,55 @@ function registerProjectTools(server, fv) {
             return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
         }
     });
+    server.tool("filevine_get_project_type_sections", "Get available sections and field selectors for the org project type", {
+        requestedFields: zod_1.z.string().optional().describe("Comma-separated fields to return (default *)"),
+    }, async (args) => {
+        try {
+            const params = {};
+            if (args.requestedFields)
+                params.requestedFields = args.requestedFields;
+            const data = await fv.get("/ProjectTypes/15062/Sections", params);
+            return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
+    server.tool("filevine_get_static_section", "Get field values for a static section on a project by section selector", {
+        projectId: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).describe("Project ID (native integer or @partner ID)"),
+        selector: zod_1.z.string().describe("Section selector from project type sections (e.g. intake, medicalInfo)"),
+    }, async (args) => {
+        try {
+            const data = await fv.get(`/Projects/${args.projectId}/Forms/${args.selector}`);
+            return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
+    server.tool("filevine_get_collection_items", "Get all items in a collection section on a project by section selector", {
+        projectId: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).describe("Project ID (native integer or @partner ID)"),
+        selector: zod_1.z.string().describe("Collection section selector from project type sections"),
+    }, async (args) => {
+        try {
+            const data = await fv.get(`/Projects/${args.projectId}/Collections/${args.selector}`);
+            return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
+    server.tool("filevine_get_collection_item", "Get a single collection item on a project by section selector and unique ID", {
+        projectId: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).describe("Project ID (native integer or @partner ID)"),
+        selector: zod_1.z.string().describe("Collection section selector"),
+        uniqueId: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).describe("Unique ID of the collection item"),
+    }, async (args) => {
+        try {
+            const data = await fv.get(`/Projects/${args.projectId}/Collections/${args.selector}/${args.uniqueId}`);
+            return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
 }
